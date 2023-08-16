@@ -2,7 +2,7 @@
 Author: 
 Date: 2023-08-11 01:56:27
 LastEditors: peiqi yu
-LastEditTime: 2023-08-13 12:13:38
+LastEditTime: 2023-08-15 02:41:02
 FilePath: /ubuntu/projects/LTSF-Linear/models/DMLP.py
 '''
 import torch
@@ -51,8 +51,8 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
-        self.hid_len = 16
-        self.hid_layers = 2
+        self.hid_len = configs.hid_len
+        self.hid_layers = configs.hid_layers
 
         # Decompsition Kernel Size
         kernel_size = 25

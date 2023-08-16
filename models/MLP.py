@@ -2,7 +2,7 @@
 Author: 
 Date: 2023-08-13 08:44:12
 LastEditors: peiqi yu
-LastEditTime: 2023-08-13 11:58:22
+LastEditTime: 2023-08-15 02:41:24
 FilePath: /ubuntu/projects/LTSF-Linear/models/MLP.py
 '''
 import torch
@@ -19,8 +19,8 @@ class Model(nn.Module):
         super(Model, self).__init__()
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
-        self.hid_len = 16
-        self.hid_layers = 2
+        self.hid_len = configs.hid_len
+        self.hid_layers = configs.hid_layers
         
         # Use this line if you want to visualize the weights
         # self.Linear.weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
