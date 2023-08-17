@@ -2,7 +2,7 @@
 Author: 
 Date: 2023-08-14 03:35:06
 LastEditors: peiqi yu
-LastEditTime: 2023-08-14 14:34:29
+LastEditTime: 2023-08-16 10:57:44
 FilePath: /ubuntu/projects/LTSF-Linear/similar_repeat.py
 '''
 import argparse
@@ -24,38 +24,98 @@ random.seed(fix_seed)
 torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
-class Similar_prediction():
+def sliding_windows(a, W):
+    a = np.asarray(a)
+    p = np.zeros(W-1,dtype=a.dtype)
+    b = np.concatenate((p,a,p))
+    s = b.strides[0]
+    strided = np.lib.stride_tricks.as_strided
+    return strided(b[W-1:], shape=(W,len(a)+W-1), strides=(-s,s))
+class Corr_Similar_prediction():
     def __init__(self,data):
         self.data = data
 
     def predict(self,predict_x,pred_len):
         corr = -np.inf
-        if len(self.data) >= len(predict_x):
+        data_len = len(self.data)
+        seq_len = len(predict_x)
+        if data_len >= seq_len:
             corr = signal.correlate(self.data, predict_x, mode='valid')
-            sum = signal.correlate(self.data, np.ones(predict_x.shape), mode='valid')
-            corr = corr / sum
+            sum = signal.correlate(self.data**2, np.ones(predict_x.shape), mode='valid')
+            corr = corr / sum**0.5
         else:
             try:
-                corr = signal.correlate(self.data, predict_x[-(len(self.data)//2):], mode='valid')
-                sum = signal.correlate(self.data, np.ones([len(self.data)//2,predict_x.shape[1]]), mode='valid')
-                corr = corr / sum
+                corr = signal.correlate(self.data, predict_x[-(data_len//2):], mode='valid')
+                sum = signal.correlate(self.data**2, np.ones([data_len//2,predict_x.shape[1]]), mode='valid')
+                corr = corr / sum**0.5
             except:
                 pdb.set_trace()
         max_index = np.argmax(corr)
-        if (len(self.data)-max_index-len(predict_x)) > pred_len:
-            output = self.data[max_index+len(predict_x):max_index+len(predict_x)+pred_len]
-        elif (len(self.data)-max_index) > max(pred_len,len(predict_x)):
-            output = np.append(self.data[max_index+len(predict_x):],
-                               predict_x[:pred_len-(len(self.data)-max_index-len(predict_x))],axis=0)
+        if (data_len-max_index-seq_len) > pred_len:
+            output = self.data[max_index+seq_len:max_index+seq_len+pred_len]
+        elif (data_len-max_index) > max(pred_len,seq_len):
+            output = np.append(self.data[max_index+seq_len:],
+                               predict_x[:pred_len-(data_len-max_index-seq_len)],axis=0)
         else:
-            output = np.append(self.data[max_index+len(predict_x):],predict_x,axis=0)
+            output = np.append(self.data[max_index+seq_len:],predict_x,axis=0)
             repeat_num = pred_len // len(output) + 1
             output = output.repeat(repeat_num,axis=0)
             output = output[:pred_len]
         assert len(output) == pred_len
         # shift
-        shift = predict_x[-5:].mean(0) - output[0]
+        shift = predict_x[-1] - output[0]
         output = torch.tensor(output) + shift
+        return output
+
+class NaiveNorm_Corr_Similar_prediction():
+    def __init__(self,data):
+        self.data = data 
+
+    def predict(self,predict_x,pred_len):
+        data_len = len(self.data)
+        add_shift = np.array(predict_x[-1])
+        if data_len >= len(predict_x):
+            predict_x = predict_x - predict_x[0] # norm predict_x naively
+            sum_x = predict_x.sum(0)
+            seq_len = len(predict_x)
+            s = self.data[:data_len-seq_len+1] 
+            corr = signal.correlate(self.data, predict_x, mode='valid') -np.expand_dims(np.matmul(s,np.array(sum_x)),1)
+            square_sum = signal.correlate(self.data**2, np.ones(predict_x.shape), mode='valid')
+            mat=sliding_windows([1]*seq_len, W=data_len-seq_len+1)
+            all_sum = np.matmul(mat,self.data)
+            sum = square_sum - 2*np.expand_dims((s*all_sum).sum(1),1) + seq_len*np.expand_dims((s**2).sum(1),1)
+            corr = corr / sum**0.5
+        else:
+            try:
+                predict_x = predict_x[-(data_len//2):]
+                predict_x = predict_x - predict_x[0] # norm predict_x naively
+                sum_x = predict_x.sum(0)
+                seq_len = len(predict_x)
+                s = self.data[:data_len-seq_len+1] 
+                corr = signal.correlate(self.data, predict_x, mode='valid') -np.expand_dims(np.matmul(s,np.array(sum_x)),1)
+                square_sum = signal.correlate(self.data**2, np.ones(predict_x.shape), mode='valid')
+                mat=sliding_windows([1]*seq_len, W=data_len-seq_len+1)
+                all_sum = np.matmul(mat,self.data)
+                sum = square_sum - 2*np.expand_dims((s*all_sum).sum(1),1) + seq_len*np.expand_dims((s**2).sum(1),1)
+                corr = corr / sum**0.5
+            except:
+                pdb.set_trace()
+        max_index = np.argmax(corr)
+        sub_shift = self.data[max_index]
+        if (data_len-max_index-seq_len) > pred_len:
+            output = self.data[max_index+seq_len:max_index+seq_len+pred_len]
+        elif (data_len-max_index) > max(pred_len,seq_len):
+            output = np.append(self.data[max_index+seq_len:],
+                               predict_x[:pred_len-(data_len-max_index-seq_len)],axis=0)
+        else:
+            output = np.append(self.data[max_index+seq_len:],predict_x,axis=0)
+            repeat_num = pred_len // len(output) + 1
+            output = output.repeat(repeat_num,axis=0)
+            output = output[:pred_len]
+        # shift
+        out_shift = add_shift - output[0]
+        output = output + out_shift
+        assert len(output) == pred_len
         return output
 
 parser = argparse.ArgumentParser(description='Autoformer & Transformer family for Time Series Forecasting')
@@ -150,12 +210,15 @@ test_dataset, test_dataloader = data_provider(args, flag='test')
 preds = []
 trues = []
 inputx = []
-folder_path = './test_results/' + setting + '/'
+folder_path = f'./test_results/{args.model}/' + setting + '/'
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
 
+if args.model == 'similar_repeat': 
+    similar_prediction = Corr_Similar_prediction(train_dataset.data_x)
+elif args.model == 'norm_similar_repeat': 
+    similar_prediction = NaiveNorm_Corr_Similar_prediction(train_dataset.data_x)
 for i, (batch_x, batch_y) in enumerate(tqdm(test_dataloader)):
-    similar_prediction = Similar_prediction(train_dataset.data_x)
     pred_y = similar_prediction.predict(batch_x[0],args.pred_len)
     pred_y = np.expand_dims(pred_y,0)
     preds.append(pred_y)

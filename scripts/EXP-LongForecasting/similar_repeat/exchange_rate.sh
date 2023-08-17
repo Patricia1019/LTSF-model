@@ -2,8 +2,8 @@
  # @Author: 
  # @Date: 2023-08-14 08:16:28
  # @LastEditors: peiqi yu
- # @LastEditTime: 2023-08-14 14:39:09
- # @FilePath: /ubuntu/projects/LTSF-Linear/scripts/EXP-LongForecasting/similar_repeat/exhange_rate.sh
+ # @LastEditTime: 2023-08-16 09:53:32
+ # @FilePath: /ubuntu/projects/LTSF-Linear/scripts/EXP-LongForecasting/similar_repeat/exchange_rate.sh
 ### 
 if [ ! -d "./logs" ]; then
     mkdir ./logs
